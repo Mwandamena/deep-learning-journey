@@ -1,10 +1,58 @@
-# Python-generated files
+# ================================
+# Python / uv
+# ================================
 __pycache__/
-*.py[oc]
-build/
+*.py[cod]
+*.pyo
+.venv/
+.env
+*.egg-info/
 dist/
-wheels/
-*.egg-info
+build/
 
-# Virtual environments
-.venv
+# uv lockfile artifacts (keep uv.lock, ignore cache)
+.uv/
+
+# ================================
+# Jupyter (for Kaggle / Colab work)
+# ================================
+.ipynb_checkpoints/
+*.ipynb_checkpoints
+
+# ================================
+# ML artifacts
+# ================================
+# Model weights & checkpoints
+*.pt
+*.pth
+*.ckpt
+*.safetensors
+
+# Training logs
+runs/
+logs/
+wandb/
+lightning_logs/
+
+# Datasets (usually too large for git)
+data/
+datasets/
+*.csv
+*.parquet
+*.h5
+*.hdf5
+
+# ================================
+# OS / Editor
+# ================================
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# ================================
+# Environment files
+# ================================
+.env
+.env.*
+!.env.example
