@@ -1,0 +1,22 @@
+[project]
+name = "fashion-mnist"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = [
+    "torch", "torchvision", "fastapi", "uvicorn",
+    "pandas", "pillow", "trainkit", "api_middleware", "python-multipart"
+]
+
+[tool.uv.sources]
+trainkit = { workspace = true }
+api_middleware = { workspace = true }
+torch = { index = "pytorch-cpu" }
+torchvision = { index = "pytorch-cpu" }
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[tool.uv]
+package = false

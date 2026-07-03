@@ -1,7 +1,8 @@
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
-from middleware.logging import logger
+
+from .logging import get_logger
 
 
 def _error_response(status: int, message: str, detail=None) -> JSONResponse:
@@ -12,7 +13,7 @@ def _error_response(status: int, message: str, detail=None) -> JSONResponse:
     return JSONResponse(status_code=status, content=body)
 
 
-def register_error_handlers(app: FastAPI) -> None:
+def register_error_handlers(app: FastAPI, logger_name: str = "api") -> None:
     """
     Call this in App.__init__() to wire up all handlers.
 
@@ -28,6 +29,7 @@ def register_error_handlers(app: FastAPI) -> None:
         // catch-all
         app.use((err, req, res, next) => res.status(500).json({...}))
     """
+    logger = get_logger(logger_name)
 
     @app.exception_handler(404)
     async def not_found_handler(request: Request, _exc):
@@ -46,6 +48,6 @@ def register_error_handlers(app: FastAPI) -> None:
             request.method,
             request.url.path,
             str(exc),
-            exc_info=True, 
+            exc_info=True,
         )
         return _error_response(500, "Internal server error")

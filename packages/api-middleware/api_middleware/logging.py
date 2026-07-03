@@ -10,29 +10,29 @@ logging.basicConfig(
     datefmt="%Y-%m-%d %H:%M:%S",
 )
 
-logger = logging.getLogger("mnist-api")
+
+def get_logger(name: str) -> logging.Logger:
+    """Each app passes its own name, e.g. get_logger('digit-classifier')."""
+    return logging.getLogger(name)
+
 
 class LoggingMiddleware(BaseHTTPMiddleware):
     """
     Logs every request + response, with duration.
     Express equivalent:
         app.use(morgan('dev'))
-        -- or a custom:
-        app.use((req, res, next) => {
-            const start = Date.now()
-            res.on('finish', () => {
-                console.log(`${req.method} ${req.url} ${res.statusCode} ${Date.now()-start}ms`)
-            })
-            next()
-        })
     """
+
+    def __init__(self, app, logger_name: str = "api"):
+        super().__init__(app)
+        self.logger = get_logger(logger_name)
 
     async def dispatch(self, request: Request, call_next):
         start = time.perf_counter()
         response = await call_next(request)
         duration_ms = (time.perf_counter() - start) * 1000
 
-        logger.info(
+        self.logger.info(
             "%s %s -> %s (%.1fms)",
             request.method,
             request.url.path,

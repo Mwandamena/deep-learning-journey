@@ -16,7 +16,11 @@ class MNISTClassifier(nn.Module):
         return self.net(x)
 
     def load(self, path: str):
-        self.load_state_dict(torch.load(path))
+        checkpoint = torch.load(path, map_location="cpu", weights_only=True)
+        if "model_state" in checkpoint:
+            state_dict = checkpoint["model_state"]
+        else:
+            state_dict = checkpoint
+        self.load_state_dict(state_dict)
         self.eval()
         return self
-

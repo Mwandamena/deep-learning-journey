@@ -1,0 +1,10 @@
+[project]
+name = "api-middleware"
+version = "0.1.0"
+description = "Shared FastAPI middleware: request logging, standardized error handlers"
+requires-python = ">=3.11"
+dependencies = ["fastapi", "starlette"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

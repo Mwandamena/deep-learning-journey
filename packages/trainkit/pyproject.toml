@@ -1,0 +1,15 @@
+[project]
+name = "trainkit"
+version = "0.1.0"
+description = "Reusable PyTorch training harness with W&B"
+requires-python = ">=3.11"
+dependencies = ["torch", "wandb"]
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
