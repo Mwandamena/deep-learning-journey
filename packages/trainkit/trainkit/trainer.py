@@ -1,11 +1,11 @@
-import torch
-import torch.nn as nn
 import os
+import torch
 import wandb
 
 class Trainer:
     def __init__(self, model, train_loader, val_loader, loss_fn, optimizer, device,
-                 checkpoint_dir="checkpoints", patience=5, use_wandb=True, wandb_project="trainkit"):
+                 checkpoint_dir="checkpoints", patience=5, use_wandb=True,
+                 wandb_project="trainkit", resume_from=None):
         self.model = model
         self.train_loader = train_loader
         self.val_loader = val_loader
@@ -18,13 +18,31 @@ class Trainer:
         self.patience = patience
         self.epochs_without_improvement = 0
         self.use_wandb = use_wandb
+        self.start_epoch = 0
         os.makedirs(self.checkpoint_dir, exist_ok=True)
+
+        if resume_from is not None:
+            self._load_checkpoint(resume_from)
 
         if self.use_wandb:
             wandb.init(project=wandb_project, config={
                 "device": device,
                 "patience": patience,
+                "resumed_from": resume_from,
             })
+
+    def _load_checkpoint(self, path):
+        """Restore model/optimizer/scaler state and continue from where training left off."""
+        checkpoint = torch.load(path, map_location=self.device, weights_only=True)
+
+        self.model.load_state_dict(checkpoint["model_state"])
+        self.optimizer.load_state_dict(checkpoint["optimizer_state"])
+        self.scaler.load_state_dict(checkpoint["scaler_state"])
+
+        self.start_epoch = checkpoint.get("epoch", 0)
+        self.best_val_acc = checkpoint.get("best_val_acc", 0.0)
+
+        print(f"Resumed from {path}: epoch={self.start_epoch}, best_val_acc={self.best_val_acc:.4f}")
 
     def train_one_epoch(self):
         self.model.train()
@@ -72,15 +90,23 @@ class Trainer:
             'epoch': epoch,
             'model_state': self.model.state_dict(),
             'optimizer_state': self.optimizer.state_dict(),
-            'scaler_state': self.scaler.state_dict()
+            'scaler_state': self.scaler.state_dict(),
+            'best_val_acc': self.best_val_acc,
         }
         path = os.path.join(self.checkpoint_dir, filename)
         torch.save(checkpoint, path)
         print(f"Checkpoint saved: {path}")
 
     def train(self, epochs):
-        print(f"Starting training for up to {epochs} epochs on {self.device}...")
-        for epoch in range(epochs):
+        """`epochs` is the TOTAL target epoch count, not additional epochs on top of start_epoch."""
+        remaining = epochs - self.start_epoch
+        if remaining <= 0:
+            print(f"Nothing to do: already at epoch {self.start_epoch}, target was {epochs}.")
+            return
+
+        print(f"Starting training from epoch {self.start_epoch + 1} to {epochs} on {self.device}...")
+
+        for epoch in range(self.start_epoch, epochs):
             train_loss = self.train_one_epoch()
             val_loss, val_acc = self.evaluate()
             print(
