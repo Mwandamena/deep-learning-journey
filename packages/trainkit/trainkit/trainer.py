@@ -2,10 +2,14 @@ import os
 import torch
 import wandb
 
+
 class Trainer:
     def __init__(self, model, train_loader, val_loader, loss_fn, optimizer, device,
-                 checkpoint_dir="checkpoints", patience=5, use_wandb=True,
-                 wandb_project="trainkit", resume_from=None):
+                 checkpoint_dir="checkpoints", patience=5, min_delta=0.001,
+                 monitor="val_loss", use_wandb=True, wandb_project="trainkit",
+                 resume_from=None):
+   
+        assert monitor in ("val_loss", "val_acc") 
         self.model = model
         self.train_loader = train_loader
         self.val_loader = val_loader
@@ -14,11 +18,15 @@ class Trainer:
         self.device = device
         self.scaler = torch.amp.GradScaler(enabled=(device == "cuda"))
         self.checkpoint_dir = checkpoint_dir
-        self.best_val_acc = 0.0
         self.patience = patience
+        self.min_delta = min_delta
+        self.monitor = monitor
         self.epochs_without_improvement = 0
         self.use_wandb = use_wandb
         self.start_epoch = 0
+
+        self.best_metric = float("inf") if monitor == "val_loss" else 0.0
+
         os.makedirs(self.checkpoint_dir, exist_ok=True)
 
         if resume_from is not None:
@@ -28,11 +36,12 @@ class Trainer:
             wandb.init(project=wandb_project, config={
                 "device": device,
                 "patience": patience,
+                "min_delta": min_delta,
+                "monitor": monitor,
                 "resumed_from": resume_from,
             })
 
     def _load_checkpoint(self, path):
-        """Restore model/optimizer/scaler state and continue from where training left off."""
         checkpoint = torch.load(path, map_location=self.device, weights_only=True)
 
         self.model.load_state_dict(checkpoint["model_state"])
@@ -40,9 +49,9 @@ class Trainer:
         self.scaler.load_state_dict(checkpoint["scaler_state"])
 
         self.start_epoch = checkpoint.get("epoch", 0)
-        self.best_val_acc = checkpoint.get("best_val_acc", 0.0)
+        self.best_metric = checkpoint.get("best_metric", self.best_metric)
 
-        print(f"Resumed from {path}: epoch={self.start_epoch}, best_val_acc={self.best_val_acc:.4f}")
+        print(f"Resumed from {path}: epoch={self.start_epoch}, best_{self.monitor}={self.best_metric:.4f}")
 
     def train_one_epoch(self):
         self.model.train()
@@ -91,14 +100,19 @@ class Trainer:
             'model_state': self.model.state_dict(),
             'optimizer_state': self.optimizer.state_dict(),
             'scaler_state': self.scaler.state_dict(),
-            'best_val_acc': self.best_val_acc,
+            'best_metric': self.best_metric,
         }
         path = os.path.join(self.checkpoint_dir, filename)
         torch.save(checkpoint, path)
         print(f"Checkpoint saved: {path}")
 
+    def _is_improvement(self, current):
+        if self.monitor == "val_loss":
+            return current < (self.best_metric - self.min_delta)
+        else:
+            return current > (self.best_metric + self.min_delta)
+
     def train(self, epochs):
-        """`epochs` is the TOTAL target epoch count, not additional epochs on top of start_epoch."""
         remaining = epochs - self.start_epoch
         if remaining <= 0:
             print(f"Nothing to do: already at epoch {self.start_epoch}, target was {epochs}.")
@@ -109,6 +123,8 @@ class Trainer:
         for epoch in range(self.start_epoch, epochs):
             train_loss = self.train_one_epoch()
             val_loss, val_acc = self.evaluate()
+            current_metric = val_loss if self.monitor == "val_loss" else val_acc
+
             print(
                 f"Epoch {epoch+1}/{epochs} | "
                 f"train_loss={train_loss:.4f} | val_loss={val_loss:.4f} | val_acc={val_acc:.4f}"
@@ -124,16 +140,19 @@ class Trainer:
 
             self.save_checkpoint(epoch + 1, "latest.pt")
 
-            if val_acc > self.best_val_acc:
-                self.best_val_acc = val_acc
+            if self._is_improvement(current_metric):
+                self.best_metric = current_metric
                 self.epochs_without_improvement = 0
                 self.save_checkpoint(epoch + 1, "best.pt")
             else:
                 self.epochs_without_improvement += 1
                 if self.epochs_without_improvement >= self.patience:
-                    print(f"Early stopping: no improvement for {self.patience} epochs.")
+                    print(
+                        f"Early stopping: no {self.monitor} improvement "
+                        f"(min_delta={self.min_delta}) for {self.patience} epochs."
+                    )
                     break
 
-        print(f"Training complete! Best val_acc: {self.best_val_acc:.4f}")
+        print(f"Training complete! Best {self.monitor}: {self.best_metric:.4f}")
         if self.use_wandb:
             wandb.finish()
